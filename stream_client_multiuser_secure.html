@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Streaming Client</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        #output {
+            border: 1px solid #ddd;
+            padding: 10px;
+            height: 300px;
+            overflow-y: scroll;
+            background-color: #fff;
+        }
+        #controls {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Secure Streaming Client</h1>
+    <div id="controls">
+        <label for="user_id">Enter User ID:</label>
+        <input type="text" id="user_id" placeholder="e.g., User1" />
+        <button id="start">Start Streaming</button>
+    </div>
+    <div id="output"></div>
+
+    <script>
+        const BASE_URL = "http://127.0.0.1:5000";
+        const output = document.getElementById("output");
+        const startButton = document.getElementById("start");
+
+        async function getToken(userId) {
+            try {
+                const response = await fetch(`${BASE_URL}/generate_token`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ user_id: userId }),
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    return data.token;
+                } else {
+                    const errorData = await response.json();
+                    throw new Error(`Error: ${errorData.error}`);
+                }
+            } catch (error) {
+                output.textContent = `Failed to get token: ${error.message}`;
+                return null;
+            }
+        }
+
+        async function streamData(userId) {
+            const token = await getToken(userId);
+            if (!token) {
+                return;
+            }
+
+            const headers = new Headers();
+            headers.append("Authorization", `Bearer ${token}`);
+
+            try {
+                const response = await fetch(`${BASE_URL}/stream`, {
+                    method: "GET",
+                    headers: headers,
+                });
+
+                if (response.ok) {
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder("utf-8");
+
+                    output.textContent = `Streaming data for ${userId}:\n\n`;
+                    while (true) {
+                        const { value, done } = await reader.read();
+                        if (done) {
+                            break;
+                        }
+                        const chunk = decoder.decode(value, { stream: true });
+                        output.textContent += chunk;
+                        output.scrollTop = output.scrollHeight; // Auto-scroll to the bottom
+                    }
+                } else {
+                    const errorData = await response.json();
+                    throw new Error(`Error: ${errorData.error}`);
+                }
+            } catch (error) {
+                output.textContent = `Failed to stream data: ${error.message}`;
+            }
+        }
+
+        startButton.addEventListener("click", () => {
+            const userId = document.getElementById("user_id").value.trim();
+            if (!userId) {
+                output.textContent = "Please enter a valid User ID.";
+                return;
+            }
+
+            output.textContent = "";
+            streamData(userId);
+        });
+    </script>
+</body>
+</html>
